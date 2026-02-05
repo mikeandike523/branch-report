@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-branch_report_terminal.py
+main.py
 
 Assumes the current working directory (pwd) is a git repo folder.
 Fetches all remotes, then prints the latest commit on each remote branch,
@@ -13,15 +13,17 @@ Requirements:
   pip install termcolor
 
 Usage:
-  python branch_report_terminal.py
+  python main.py [--timestamp-format {readable,iso}]
 """
 
 from __future__ import annotations
 
+import argparse
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple, Iterable
 
@@ -35,7 +37,7 @@ class BranchInfo:
     refname: str          # full ref
     commit_hash: str
     committer: str
-    commit_date: str      # ISO 8601
+    commit_date: datetime # ISO 8601 parsed
     subject: str
 
 
@@ -84,9 +86,9 @@ def list_local_branches(repo_dir: Path) -> List[Tuple[str, str]]:
     return [(f"refs/heads/{s}", s) for s in shorts]
 
 
-def get_latest_commit(repo_dir: Path, refname: str) -> Tuple[str, str, str, str]:
+def get_latest_commit(repo_dir: Path, refname: str) -> Tuple[str, str, datetime, str]:
     """
-    Returns (hash, committer, date_iso, subject) for the tip commit of ref.
+    Returns (hash, committer, date_datetime, subject) for the tip commit of ref.
     Merge commits are included automatically if they are the tip.
     """
     fmt = "%H%x00%cn%x00%cd%x00%s"
@@ -94,7 +96,8 @@ def get_latest_commit(repo_dir: Path, refname: str) -> Tuple[str, str, str, str]
     parts = stdout.split("\x00")
     if len(parts) != 4:
         raise RuntimeError(f"Unexpected log format for {refname}: {stdout!r}")
-    return parts[0], parts[1], parts[2], parts[3]
+    date_obj = datetime.fromisoformat(parts[2])
+    return parts[0], parts[1], date_obj, parts[3]
 
 
 # ----------------------------
@@ -162,6 +165,22 @@ def wrap_pieces(
     return lines
 
 
+def format_date(dt: datetime) -> str:
+    month = dt.strftime('%b').capitalize() + '.'
+    day = dt.day
+    ordinal = 'th' if 11 <= day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+    day_str = f"{day}{ordinal}"
+    year = dt.year
+    time_str = dt.strftime('%I:%M:%S %p')
+    offset = dt.utcoffset()
+    if offset is not None:
+        hours = int(offset.total_seconds() / 3600)
+        tz_str = f"GMT{hours:+d}"
+    else:
+        tz_str = 'GMT'
+    return f"{month} {day_str}, {year}, {time_str}, {tz_str}"
+
+
 def print_block(lines: List[str]) -> None:
     for ln in lines:
         print(ln)
@@ -187,6 +206,11 @@ def local_branches_not_on_any_remote(local_shorts: List[str], remote_shorts: Lis
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate branch report")
+    parser.add_argument('--timestamp-format', choices=['readable', 'iso'], default='readable',
+                        help='Format for timestamps: readable (default) or iso')
+    args = parser.parse_args()
+
     repo_dir = Path.cwd()
     ensure_git_repo(repo_dir)
 
@@ -243,7 +267,10 @@ def main() -> int:
         for b in infos:
             branch = colored(b.display_name, "green", attrs=["bold"])
             chash = colored(b.commit_hash[:12], "yellow")
-            cdate = colored(b.commit_date, "magenta")
+            if args.timestamp_format == 'iso':
+                cdate = colored(b.commit_date.isoformat(), "magenta")
+            else:
+                cdate = colored(format_date(b.commit_date), "magenta")
             comm = colored(b.committer, "blue")
             msg = colored(b.subject, "white")
 
