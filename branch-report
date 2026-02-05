@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pippefail
+set -euo pipefail
 
 dn="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
@@ -13,5 +13,5 @@ else
     exit 1
 fi
 
-python "$dn/branch_report.py" "$@"
+python "$dn/main.py" "$@"
 
