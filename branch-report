@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -euo pippefail
+
+dn="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+
+if [ -d "$dn/.venv/Scripts" ]; then
+    source "$dn/.venv/Scripts/activate"
+elif [ -d "$dn/.venv/bin" ]; then
+    source "$dn/.venv/bin/activate"
+else
+    echo "Virtual environment not found in $dn/.venv/Scripts or $dn/.venv/bin" >&2
+    exit 1
+fi
+
+python "$dn/branch_report.py" "$@"
+
