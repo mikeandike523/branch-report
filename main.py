@@ -209,6 +209,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate branch report")
     parser.add_argument('--timestamp-format', choices=['readable', 'iso'], default='readable',
                         help='Format for timestamps: readable (default) or iso')
+    parser.add_argument('--sort', choices=['newest', 'oldest', 'latest', 'earliest', 'index'], default='newest',
+                        help='Sort order: newest/latest (default, latest first), oldest/earliest (oldest first), index (git index order)')
     args = parser.parse_args()
 
     repo_dir = Path.cwd()
@@ -247,9 +249,16 @@ def main() -> int:
         except RuntimeError:
             continue
 
-    # Sort by date desc (ISO sorts lexicographically)
-    remote_infos.sort(key=lambda b: b.commit_date, reverse=True)
-    local_only_infos.sort(key=lambda b: b.commit_date, reverse=True)
+    # Sort based on --sort option
+    if args.sort in ('newest', 'latest'):
+        remote_infos.sort(key=lambda b: b.commit_date, reverse=True)
+        local_only_infos.sort(key=lambda b: b.commit_date, reverse=True)
+    elif args.sort in ('oldest', 'earliest'):
+        remote_infos.sort(key=lambda b: b.commit_date, reverse=False)
+        local_only_infos.sort(key=lambda b: b.commit_date, reverse=False)
+    elif args.sort == 'index':
+        # Keep order as returned by git for-each-ref (typically alphabetical)
+        pass
 
     # Header
     title = f"Latest commits per branch in {repo_dir.name}"
