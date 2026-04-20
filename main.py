@@ -197,12 +197,20 @@ def build_branch_info(repo_dir: Path, kind: str, refname: str, display: str) -> 
 
 def local_branches_not_on_any_remote(local_shorts: List[str], remote_shorts: List[str]) -> List[str]:
     """
-    Exclude local branches that "correspond" to a remote branch.
+    Return local branches that have no corresponding remote branch.
     We treat local 'foo' as corresponding if any remote branch ends with '/foo'
     (e.g. origin/foo, upstream/foo).
     """
     remote_leaf_names = {r.split("/", 1)[1] for r in remote_shorts if "/" in r}
     return [l for l in local_shorts if l not in remote_leaf_names]
+
+
+def remote_has_local_tracking(remote_short: str, local_shorts: List[str]) -> bool:
+    """Return True if a local branch with the same leaf name exists for this remote branch."""
+    if "/" not in remote_short:
+        return False
+    leaf = remote_short.split("/", 1)[1]
+    return leaf in local_shorts
 
 
 def main() -> int:
@@ -229,16 +237,22 @@ def main() -> int:
     remote_refs = list_remote_branches(repo_dir)
     local_refs = list_local_branches(repo_dir)
 
-    remote_infos: List[BranchInfo] = []
+    remote_shorts = [short for _, short in remote_refs]
+    local_shorts_list = [short for _, short in local_refs]
+
+    remote_only_infos: List[BranchInfo] = []
+    remote_tracked_infos: List[BranchInfo] = []
     for full_ref, short in remote_refs:
         try:
-            remote_infos.append(build_branch_info(repo_dir, "remote", full_ref, short))
+            if remote_has_local_tracking(short, local_shorts_list):
+                remote_tracked_infos.append(build_branch_info(repo_dir, "remote_tracked", full_ref, short))
+            else:
+                remote_only_infos.append(build_branch_info(repo_dir, "remote_only", full_ref, short))
         except RuntimeError:
             continue
 
     # Local-only: those not corresponding to any remote branch name
-    remote_shorts = [short for _, short in remote_refs]
-    local_only_short_names = set(local_branches_not_on_any_remote([short for _, short in local_refs], remote_shorts))
+    local_only_short_names = set(local_branches_not_on_any_remote(local_shorts_list, remote_shorts))
 
     local_only_infos: List[BranchInfo] = []
     for full_ref, short in local_refs:
@@ -250,12 +264,13 @@ def main() -> int:
             continue
 
     # Sort based on --sort option
+    all_lists = [remote_only_infos, remote_tracked_infos, local_only_infos]
     if args.sort in ('newest', 'latest'):
-        remote_infos.sort(key=lambda b: b.commit_date, reverse=True)
-        local_only_infos.sort(key=lambda b: b.commit_date, reverse=True)
+        for lst in all_lists:
+            lst.sort(key=lambda b: b.commit_date, reverse=True)
     elif args.sort in ('oldest', 'earliest'):
-        remote_infos.sort(key=lambda b: b.commit_date, reverse=False)
-        local_only_infos.sort(key=lambda b: b.commit_date, reverse=False)
+        for lst in all_lists:
+            lst.sort(key=lambda b: b.commit_date, reverse=False)
     elif args.sort == 'index':
         # Keep order as returned by git for-each-ref (typically alphabetical)
         pass
@@ -302,8 +317,9 @@ def main() -> int:
 
         print()
 
-    print_section("Remote branches", remote_infos)
-    print_section("Local branches (no corresponding remote)", local_only_infos)
+    print_section("Remote Only", remote_only_infos)
+    print_section("Remote + Tracked", remote_tracked_infos)
+    print_section("Local Only", local_only_infos)
 
     return 0
 
