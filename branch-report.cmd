@@ -1,1 +1,1 @@
-"C:\Program Files\Git\bin\bash" "%~dp0branch-report" "%*"
+"C:\Program Files\Git\bin\bash" "%~dp0branch-report" %*
